@@ -6,14 +6,17 @@ var logger = require('morgan');
 const bodyParser = require('body-parser');
 const  mongoose=require('mongoose');
 var Article=require('./models/articles');
+const expressValidator=require('express-validator');
+const flash=require('connect-flash');
+const session=require('express-session');
 
-mongoose.connect('mongodb://localhost/articles');
+mongoose.connect('mongodb://localhost/nodekb');
 let db=mongoose.connection;
 
 //check connections
 
 db.once('open',function () {
-   console.log('connected to MongoDb')
+   console.log('connected to MongoDb');
 });
 
 
@@ -23,12 +26,16 @@ db.on('error',function (err) {
   console.log(err);
 });
 
+let users=require('./routes/users');
 var indexRouter = require('./routes/index');
 //var idRouter = require('./routes/idroute');
 var addRouter = require('./routes/add');
 var usersRouter = require('./routes/users');
+//var articles = require('./routes/articles');
 
 var app = express();
+
+app.use('/users',users);
 
 // view engine setup
 app.set('views', path.join(__dirname, 'views'));
@@ -46,10 +53,43 @@ app.use(express.urlencoded({ extended: false }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
+//express session middleware
+app.use(session({
+    secret: 'keyboard cat',
+    resave: true,
+    saveUninitialized: true
+
+}));
+//express messages middleware
+app.use(require('connect-flash')());
+app.use(function (req, res, next) {
+    res.locals.messages = require('express-messages')(req, res);
+    next();
+});
+//express validator middleware
+app.use(expressValidator({
+    errorFormatter: function(param, msg, value) {
+        var namespace = param.split('.')
+            , root    = namespace.shift()
+            , formParam = root;
+
+        while(namespace.length) {
+            formParam += '[' + namespace.shift() + ']';
+        }
+        return {
+            param : formParam,
+            msg   : msg,
+            value : value
+        };
+    }
+}));
+
 app.use('/', indexRouter);
-//app.use('/article/:id', idRouter);
+
 app.use('/articles/add',addRouter);
 app.use('/users', usersRouter);
+//app.use('/articles',articles);
+//app.use('/article/:id', idRouter);    //tip:/:id should always be in the bottom because other routes also tries to access /:id
 
 //for individual article
 app.get('/article/:id',function (req,res) {
@@ -104,6 +144,7 @@ app.post('/article/edit/:id',function (req,res) {
         }
         else
         {
+            req.flash('success','article editted');
             console.log(article);
             console.log('done');
             res.redirect('/');
@@ -121,6 +162,7 @@ app.delete('/article/:id',function (req,res) {
      {
        console.log(err);
      }
+     req.flash('danger','article deleted');
       res.send('Deleted successfully');
    });
 });
